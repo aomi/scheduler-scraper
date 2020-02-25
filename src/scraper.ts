@@ -3,16 +3,23 @@ import request from 'request-promise';
 import { performance } from 'perf_hooks';
 import fs from 'fs';
 import * as readline from 'readline';
+import { log } from 'util';
 
 const BASE_URL = 'https://web.uvic.ca/calendar2020-01/CDs/';
 const SECTIONS_URL = 'https://www.uvic.ca/BAN1P/bwckctlg.p_disp_listcrse';
 
 interface Course {
   code: string;
-  crns: string[];
+  sections: Section[];
   subject: string;
   title: string;
   term: string;
+}
+
+interface Section {
+  crn: string;
+  section_type: string;
+  section_number: string;
 }
 
 /**
@@ -24,7 +31,6 @@ const getDepartments = async () => {
   try {
     const response = await request(BASE_URL);
     const $ = cheerio.load(response);
-
     const departments: string[] = [];
     $('a').each((index, element) => {
       const department = $(element).attr('href');
@@ -76,16 +82,19 @@ const getSections = async (params: string) => {
     // response = await request(url, { family: 4 });
     const response = await request(`${SECTIONS_URL}${params}`);
     const $ = cheerio.load(response);
-
-    const crns: string[] = [];
+    const sections: Section[] = [];
+    let section: Section;
     $('a').each((index, element) => {
-      const temp = $(element).attr('href');
-      if (temp && /crn_in=(\d+)/g.test(temp)) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        crns.push(temp.match(/crn_in=(\d+)/)![1]);
+      const linkText = $(element).text();
+      if(linkText && /[\w\s]*-[\d\s]*-.*-.*/g.test(linkText)){
+        const linkArray = linkText.split('-');
+        const crn = linkArray[1].trim();
+        const section_type = linkArray[3].charAt(1);
+        const section_number = linkArray[3].slice(2,4);
+        sections.push({crn, section_type, section_number});
       }
     });
-    return crns;
+    return sections;
   } catch (error) {
     throw new Error('Failed to get sections');
   }
@@ -123,10 +132,10 @@ const getOffered = async (subject: string, code: string) => {
 
     const courses: Course[] = [];
     for (const schedule of schedules) {
-      const crns = await getSections(schedule);
+      const sections = await getSections(schedule);
       const term = (schedule.match(/term_in=(\d+)/) || [])[1];
-      if (crns.length) {
-        courses.push({ code, crns, subject, title, term: term || '0' });
+      if (sections.length) {
+        courses.push({ code, sections, subject, title, term: term || '0' });
       }
     }
     return courses;
@@ -142,14 +151,14 @@ const main = async () => {
 
   const failed: string[] = [];
   const departments = await getDepartments();
-
   process.stdout.write('Getting courses for ');
   const results: Course[] = [];
-  for (const department of departments) {
+  for(const department of departments){
     try {
       readline.cursorTo(process.stdout, 20);
       process.stdout.write(`${department}  `);
       const courseCodes = await getCourseCodes(department);
+
       const courses = await Promise.all(courseCodes.map(async code => await getOffered(department, code)));
       results.push(...courses.flat());
     } catch (error) {
@@ -168,7 +177,7 @@ const main = async () => {
   }
   console.log(`Getting course data took ${(finish - start) / 60000} minutes`);
 
-  fs.writeFileSync('courses.json', JSON.stringify(results));
+  fs.writeFileSync('courses.json', JSON.stringify(results, null, 2));
 };
 
 main();
