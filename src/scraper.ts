@@ -18,8 +18,8 @@ interface Course {
 
 interface Section {
   crn: string;
-  section_type: string;
-  section_number: string;
+  sectionType: string;
+  sectionNumber: string;
 }
 
 /**
@@ -83,15 +83,14 @@ const getSections = async (params: string) => {
     const response = await request(`${SECTIONS_URL}${params}`);
     const $ = cheerio.load(response);
     const sections: Section[] = [];
-    let section: Section;
     $('a').each((index, element) => {
       const linkText = $(element).text();
-      if(linkText && /[\w\s]*-[\d\s]*-.*-.*/g.test(linkText)){
+      if (linkText && /[\w\s]*-[\d\s]*-.*-.*/g.test(linkText)) {
         const linkArray = linkText.split('-');
         const crn = linkArray[1].trim();
-        const section_type = linkArray[3].charAt(1);
-        const section_number = linkArray[3].slice(2,4);
-        sections.push({crn, section_type, section_number});
+        const sectionType = linkArray[3].charAt(1);
+        const sectionNumber = linkArray[3].slice(2, 4);
+        sections.push({ crn, sectionType, sectionNumber });
       }
     });
     return sections;
@@ -153,7 +152,7 @@ const main = async () => {
   const departments = await getDepartments();
   process.stdout.write('Getting courses for ');
   const results: Course[] = [];
-  for(const department of departments){
+  for (const department of departments) {
     try {
       readline.cursorTo(process.stdout, 20);
       process.stdout.write(`${department}  `);
